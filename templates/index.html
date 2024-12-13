@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>URL Shortener</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .container {
+            display: flex;
+            gap: 20px;
+        }
+        .section {
+            flex: 1;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            margin: 8px 0;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h1>URL Shortener</h1>
+    <div class="container">
+        <div class="section">
+            <h2>Shorten URL</h2>
+            <form action="/shorten" method="POST">
+                <input type="text" name="url" placeholder="Enter URL to shorten" required>
+                <button type="submit">Shorten</button>
+            </form>
+            {{if .ShortURL}}
+            <div class="result">
+                Shortened URL: <strong>{{.ShortURL}}</strong>
+            </div>
+            {{end}}
+        </div>
+        <div class="section">
+            <h2>Decode URL</h2>
+            <form action="/decode" method="POST">
+                <input type="text" name="code" placeholder="Enter shortened code" required>
+                <button type="submit">Decode</button>
+            </form>
+            {{if .OriginalURL}}
+            <div class="result">
+                Original URL: <a href="{{.OriginalURL}}">{{.OriginalURL}}</a>
+            </div>
+            {{end}}
+        </div>
+    </div>
+</body>
+</html>

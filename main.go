@@ -4,13 +4,20 @@ import (
 	"database/sql"
 	"flag"
 	"fmt"
+	"html/template"
 	"log"
+	"net/http"
 	"net/url"
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 	"urlshortener/readable"
 )
+
+type PageData struct {
+	ShortURL    string
+	OriginalURL string
+}
 
 var db *sql.DB
 
@@ -84,37 +91,57 @@ func createReadableString(inputURL string) (string, error) {
 	return result.String(), nil
 }
 
+func handleIndex(w http.ResponseWriter, r *http.Request) {
+	tmpl := template.Must(template.ParseFiles("templates/index.html"))
+	tmpl.Execute(w, &PageData{})
+}
+
+func handleShorten(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	inputURL := r.FormValue("url")
+	shortURL, err := createReadableString(inputURL)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	tmpl := template.Must(template.ParseFiles("templates/index.html"))
+	tmpl.Execute(w, &PageData{ShortURL: shortURL})
+}
+
+func handleDecode(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Redirect(w, r, "/", http.StatusSeeOther)
+		return
+	}
+
+	code := r.FormValue("code")
+	originalURL, err := decodeReadableString(code)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	tmpl := template.Must(template.ParseFiles("templates/index.html"))
+	tmpl.Execute(w, &PageData{OriginalURL: originalURL})
+}
+
 func main() {
 	if err := initDB(); err != nil {
 		log.Fatal("Failed to initialize database:", err)
 	}
 	defer db.Close()
-	// Parse command line flags
-	urlFlag := flag.String("url", "", "URL to convert to readable string")
-	decodeFlag := flag.String("decode", "", "Decode a shortened string back to URL")
-	flag.Parse()
 
-	if *urlFlag != "" && *decodeFlag != "" {
-		log.Fatal("Please use either -url OR -decode, not both")
-	}
+	// Set up HTTP routes
+	http.HandleFunc("/", handleIndex)
+	http.HandleFunc("/shorten", handleShorten)
+	http.HandleFunc("/decode", handleDecode)
 
-	if *urlFlag == "" && *decodeFlag == "" {
-		log.Fatal("Please provide either -url or -decode flag")
-	}
-
-	if *urlFlag != "" {
-		// Encode mode
-		result, err := createReadableString(*urlFlag)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println(result)
-	} else {
-		// Decode mode
-		result, err := decodeReadableString(*decodeFlag)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println(result)
-	}
+	// Start the server
+	fmt.Println("Server starting on http://localhost:8080")
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
