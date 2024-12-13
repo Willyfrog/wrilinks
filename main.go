@@ -10,7 +10,7 @@ import (
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
-	"urlshortener/readable"
+	"github.com/sqids/sqids-go"
 )
 
 type PageData struct {
@@ -19,6 +19,16 @@ type PageData struct {
 }
 
 var db *sql.DB
+var sqidsEncoder *sqids.Sqids
+
+func init() {
+	var err error
+	// Initialize Sqids with default options
+	sqidsEncoder, err = sqids.New(sqids.Options{})
+	if err != nil {
+		log.Fatal("Failed to initialize Sqids:", err)
+	}
+}
 
 func initDB() error {
 	var err error
@@ -30,7 +40,7 @@ func initDB() error {
 	// Create table if it doesn't exist
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS urls (
-			short_code TEXT PRIMARY KEY,
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
 			original_url TEXT NOT NULL
 		)
 	`)
@@ -38,12 +48,15 @@ func initDB() error {
 }
 
 func decodeReadableString(encoded string) (string, error) {
-	// Remove hyphens from the input
-	cleaned := strings.ReplaceAll(encoded, "-", "")
+	// Decode the Sqids string to get the ID
+	ids, err := sqidsEncoder.Decode(encoded)
+	if err != nil || len(ids) == 0 {
+		return "", fmt.Errorf("invalid code: %s", encoded)
+	}
 	
-	// Query the database for the original URL
+	// Query the database for the original URL using the decoded ID
 	var originalURL string
-	err := db.QueryRow("SELECT original_url FROM urls WHERE short_code = ?", cleaned).Scan(&originalURL)
+	err = db.QueryRow("SELECT original_url FROM urls WHERE id = ?", ids[0]).Scan(&originalURL)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return "", fmt.Errorf("no URL found for code: %s", encoded)
@@ -68,26 +81,25 @@ func createReadableString(inputURL string) (string, error) {
 
 	fullURL := parsedURL.String()
 	
-	// Generate a readable code
-	urlBytes := []byte(fullURL + fmt.Sprintf("%d", strings.Count(fullURL, "")))
-	encoded := readable.GenerateReadableString(urlBytes)
-	
-	// Store in database
-	_, err = db.Exec("INSERT INTO urls (short_code, original_url) VALUES (?, ?)", encoded, fullURL)
+	// Insert into database and get the ID
+	result, err := db.Exec("INSERT INTO urls (original_url) VALUES (?)", fullURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to store URL: %v", err)
 	}
 	
-	// Insert hyphens for readability
-	var result strings.Builder
-	for i, char := range encoded {
-		if i > 0 && i%4 == 0 {
-			result.WriteRune('-')
-		}
-		result.WriteRune(char)
+	// Get the inserted ID
+	id, err := result.LastInsertId()
+	if err != nil {
+		return "", fmt.Errorf("failed to get inserted ID: %v", err)
 	}
 	
-	return result.String(), nil
+	// Encode the ID using Sqids
+	encoded, err := sqidsEncoder.Encode([]uint64{uint64(id)})
+	if err != nil {
+		return "", fmt.Errorf("failed to encode ID: %v", err)
+	}
+	
+	return encoded, nil
 }
 
 func handleIndex(w http.ResponseWriter, r *http.Request) {
