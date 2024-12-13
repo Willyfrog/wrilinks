@@ -8,8 +8,8 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/btcsuite/btcutil/base58"
 	_ "github.com/mattn/go-sqlite3"
+	"urlshortener/readable"
 )
 
 var db *sql.DB
@@ -62,14 +62,9 @@ func createReadableString(inputURL string) (string, error) {
 
 	fullURL := parsedURL.String()
 	
-	// Generate a unique code using base58
+	// Generate a readable code
 	urlBytes := []byte(fullURL + fmt.Sprintf("%d", strings.Count(fullURL, "")))
-	encoded := base58.Encode(urlBytes)
-	
-	// Take first 12 characters for a shorter string
-	if len(encoded) > 12 {
-		encoded = encoded[:12]
-	}
+	encoded := readable.GenerateReadableString(urlBytes)
 	
 	// Store in database
 	_, err = db.Exec("INSERT INTO urls (short_code, original_url) VALUES (?, ?)", encoded, fullURL)
