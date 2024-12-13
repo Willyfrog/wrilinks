@@ -7,8 +7,6 @@ import (
 	"log"
 	"net/http"
 	"net/url"
-	"strings"
-
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/sqids/sqids-go"
 )
@@ -49,8 +47,8 @@ func initDB() error {
 
 func decodeReadableString(encoded string) (string, error) {
 	// Decode the Sqids string to get the ID
-	ids, err := sqidsEncoder.Decode(encoded)
-	if err != nil || len(ids) == 0 {
+	ids := sqidsEncoder.Decode(encoded)
+	if len(ids) == 0 {
 		return "", fmt.Errorf("invalid code: %s", encoded)
 	}
 	
