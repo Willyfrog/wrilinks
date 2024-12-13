@@ -54,8 +54,7 @@ func decodeReadableString(encoded string) (string, error) {
 	
 	// Query the database for the original URL using the decoded ID
 	var originalURL string
-	err = db.QueryRow("SELECT original_url FROM urls WHERE id = ?", ids[0]).Scan(&originalURL)
-	if err != nil {
+	if err := db.QueryRow("SELECT original_url FROM urls WHERE id = ?", ids[0]).Scan(&originalURL); err != nil {
 		if err == sql.ErrNoRows {
 			return "", fmt.Errorf("no URL found for code: %s", encoded)
 		}
