@@ -78,7 +78,22 @@ func createReadableString(inputURL string) (string, error) {
 
 	fullURL := parsedURL.String()
 	
-	// Insert into database and get the ID
+	// Check if URL already exists
+	var existingID int64
+	err = db.QueryRow("SELECT id FROM urls WHERE original_url = ?", fullURL).Scan(&existingID)
+	if err == nil {
+		// URL already exists, encode and return existing ID
+		encoded, err := sqidsEncoder.Encode([]uint64{uint64(existingID)})
+		if err != nil {
+			return "", fmt.Errorf("failed to encode existing ID: %v", err)
+		}
+		return encoded, nil
+	}
+	if err != sql.ErrNoRows {
+		return "", fmt.Errorf("database error: %v", err)
+	}
+	
+	// URL doesn't exist, insert it
 	result, err := db.Exec("INSERT INTO urls (original_url) VALUES (?)", fullURL)
 	if err != nil {
 		return "", fmt.Errorf("failed to store URL: %v", err)
