@@ -10,6 +10,26 @@ import (
 	"github.com/btcsuite/btcutil/base58"
 )
 
+func decodeReadableString(encoded string) (string, error) {
+	// Remove hyphens from the input
+	cleaned := strings.ReplaceAll(encoded, "-", "")
+	
+	// Decode from base58
+	decoded := base58.Decode(cleaned)
+	if len(decoded) == 0 {
+		return "", fmt.Errorf("invalid encoded string")
+	}
+
+	// Convert back to string and validate as URL
+	urlStr := string(decoded)
+	_, err := url.Parse(urlStr)
+	if err != nil {
+		return "", fmt.Errorf("decoded string is not a valid URL: %v", err)
+	}
+
+	return urlStr, nil
+}
+
 func createReadableString(inputURL string) (string, error) {
 	// Parse and validate the URL
 	parsedURL, err := url.Parse(inputURL)
@@ -47,18 +67,31 @@ func createReadableString(inputURL string) (string, error) {
 
 func main() {
 	// Parse command line flags
-	url := flag.String("url", "", "URL to convert to readable string")
+	urlFlag := flag.String("url", "", "URL to convert to readable string")
+	decodeFlag := flag.String("decode", "", "Decode a shortened string back to URL")
 	flag.Parse()
 
-	if *url == "" {
-		log.Fatal("Please provide a URL using the -url flag")
+	if *urlFlag != "" && *decodeFlag != "" {
+		log.Fatal("Please use either -url OR -decode, not both")
 	}
 
-	// Convert URL to readable string
-	result, err := createReadableString(*url)
-	if err != nil {
-		log.Fatal(err)
+	if *urlFlag == "" && *decodeFlag == "" {
+		log.Fatal("Please provide either -url or -decode flag")
 	}
 
-	fmt.Println(result)
+	if *urlFlag != "" {
+		// Encode mode
+		result, err := createReadableString(*urlFlag)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(result)
+	} else {
+		// Decode mode
+		result, err := decodeReadableString(*decodeFlag)
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(result)
+	}
 }
