@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"fmt"
 	"log"
@@ -8,26 +9,43 @@ import (
 	"strings"
 
 	"github.com/btcsuite/btcutil/base58"
+	_ "github.com/mattn/go-sqlite3"
 )
+
+var db *sql.DB
+
+func initDB() error {
+	var err error
+	db, err = sql.Open("sqlite3", "urls.db")
+	if err != nil {
+		return err
+	}
+
+	// Create table if it doesn't exist
+	_, err = db.Exec(`
+		CREATE TABLE IF NOT EXISTS urls (
+			short_code TEXT PRIMARY KEY,
+			original_url TEXT NOT NULL
+		)
+	`)
+	return err
+}
 
 func decodeReadableString(encoded string) (string, error) {
 	// Remove hyphens from the input
 	cleaned := strings.ReplaceAll(encoded, "-", "")
 	
-	// Decode from base58
-	decoded := base58.Decode(cleaned)
-	if len(decoded) == 0 {
-		return "", fmt.Errorf("invalid encoded string")
-	}
-
-	// Convert back to string and validate as URL
-	urlStr := string(decoded)
-	_, err := url.Parse(urlStr)
+	// Query the database for the original URL
+	var originalURL string
+	err := db.QueryRow("SELECT original_url FROM urls WHERE short_code = ?", cleaned).Scan(&originalURL)
 	if err != nil {
-		return "", fmt.Errorf("decoded string is not a valid URL: %v", err)
+		if err == sql.ErrNoRows {
+			return "", fmt.Errorf("no URL found for code: %s", encoded)
+		}
+		return "", err
 	}
 
-	return urlStr, nil
+	return originalURL, nil
 }
 
 func createReadableString(inputURL string) (string, error) {
@@ -42,18 +60,24 @@ func createReadableString(inputURL string) (string, error) {
 		parsedURL.Scheme = "https"
 	}
 
-	// Convert URL to bytes
-	urlBytes := []byte(parsedURL.String())
+	fullURL := parsedURL.String()
 	
-	// Encode to base58
+	// Generate a unique code using base58
+	urlBytes := []byte(fullURL + fmt.Sprintf("%d", strings.Count(fullURL, "")))
 	encoded := base58.Encode(urlBytes)
 	
-	// Take first 12 characters for a shorter, but still unique string
+	// Take first 12 characters for a shorter string
 	if len(encoded) > 12 {
 		encoded = encoded[:12]
 	}
 	
-	// Insert a hyphen every 4 characters for better readability
+	// Store in database
+	_, err = db.Exec("INSERT INTO urls (short_code, original_url) VALUES (?, ?)", encoded, fullURL)
+	if err != nil {
+		return "", fmt.Errorf("failed to store URL: %v", err)
+	}
+	
+	// Insert hyphens for readability
 	var result strings.Builder
 	for i, char := range encoded {
 		if i > 0 && i%4 == 0 {
@@ -66,6 +90,10 @@ func createReadableString(inputURL string) (string, error) {
 }
 
 func main() {
+	if err := initDB(); err != nil {
+		log.Fatal("Failed to initialize database:", err)
+	}
+	defer db.Close()
 	// Parse command line flags
 	urlFlag := flag.String("url", "", "URL to convert to readable string")
 	decodeFlag := flag.String("decode", "", "Decode a shortened string back to URL")
